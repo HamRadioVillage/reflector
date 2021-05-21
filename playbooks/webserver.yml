@@ -1,0 +1,89 @@
+- hosts: aws_webservers
+  remote_user: <YOUR_ADMIN_USER>
+  become: yes
+  vars:
+      domains:
+        - name: "xlx.hamvillage.org"
+          root_directives: |
+                    index index.php;
+                    try_files $uri $uri/ =404;
+          additional_locations:
+            - path:  ~ \.php$
+              directive: |
+                    include snippets/fastcgi-php.conf;
+                    fastcgi_pass unix:/run/php/php7.2-fpm.sock;
+            - path: /ircdbbproxy
+              directive: proxy_pass http://live2.ircddb.net:8080/ircddblive5.html;
+            - path: /jquery-1.4.2.min.js
+              directive: proxy_pass http://live2.ircddb.net:8080/jquery-1.4.2.min.js;
+            - path: /livelog5.js
+              directive: proxy_pass http://live2.ircddb.net:8080/livelog5.js;
+            - path: /jj3.yaws
+              directive: proxy_pass http://live2.ircddb.net:8080/jj3.yaws?p=0;
+        - name: "m17.hamvillage.org"
+          root_directives: |
+                    index index.php;
+                    try_files $uri $uri/ =404;
+          additional_locations:
+            - path:  ~ \.php$
+              directive: |
+                    include snippets/fastcgi-php.conf;
+                    fastcgi_pass unix:/run/php/php7.2-fpm.sock;
+
+  tasks:
+    - name: add apt repos
+      apt_repository:
+        repo: "{{ item }}"
+      loop:
+        - ppa:nginx/stable
+        - ppa:certbot/certbot
+
+    - name: install software packages
+      apt:
+        name: ['software-properties-common', 'nginx' ,'certbot', 'python-certbot-nginx']
+        state: latest
+        update_cache: no
+        install_recommends: no
+
+    - name: remove default nginx site 
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Generate dhparams
+      shell: openssl dhparam -out /etc/nginx/dhparam.pem 2048
+      args:
+        creates: /etc/nginx/dhparam.pem
+
+    - name: generate letsencrypt certs
+      command: certbot certonly -m eric@girderboot.com --agree-tos --nginx  -d {{ domain.name }}
+      args: 
+        creates: /etc/letsencrypt/live/{{ domain.name }}
+      loop: "{{ domains }}"
+      loop_control:
+        loop_var: domain
+
+    - name : set website conf files
+      template:
+        src: nginx_site.j2
+        dest: /etc/nginx/sites-enabled/{{ domain.name }}.conf
+        owner: root
+        group: www-data
+        mode: 0644
+        backup: no
+      notify:
+        - restart nginx
+      loop: "{{ domains }}"
+      loop_control:
+        loop_var: domain
+
+    - name: make sure nginx is running
+      service:
+        name: nginx
+        state: started
+
+  handlers:
+  - name: restart nginx
+    service:
+      name: nginx
+      state: restarted

@@ -1,0 +1,228 @@
+- hosts: m17_xlx_links
+  remote_user: <YOUR_ADMIN_USER>
+  become: yes
+  vars:
+    m17_callsign: 'K0HRV X'
+    m17_ref_name_and_module: 'M17-HRV A'
+    m17_server_address: 'm17.hamvillage.org'
+    m17_gain_adjust: "-1"
+    xlx_reflector_number: '478'
+    xlx_reflector_module: 'A'
+    dmr_id: '3177826'
+    dmr_port: '62030'
+    local_ip: '127.0.0.1'
+    debug: 0
+
+
+  tasks:
+    - name: install prereq packages
+      apt:
+        name: 
+         - git
+         - make
+         - cmake
+        state: latest
+        update_cache: yes
+        install_recommends: no
+
+    # md380_vocoder
+
+    - name: Download source for md380_vocoder
+      git:
+        repo: 'https://github.com/nostar/md380_vocoder.git'
+        dest: /opt/md380_vocoder.git
+        update: yes
+        force: yes
+      register: md380_vcocoder_source
+
+    - name: Clean build for md380_vocoder
+      make:
+        chdir: /opt/md380_vocoder.git
+        target: clean
+      when: md380_vcocoder_source.changed
+
+    - name: make md380_vocoder
+      make:
+        chdir: /opt/md380_vocoder.git
+      when: md380_vcocoder_source.changed
+
+    - name: install md380_vocoder
+      make:
+        chdir: /opt/md380_vocoder.git
+        target: install
+      when: md380_vcocoder_source.changed
+      #notify: restart mrefd
+
+    # imbe_vocoder
+
+    - name: Download source for imbe_vocoder
+      git:
+        repo: 'https://github.com/nostar/imbe_vocoder.git'
+        dest: /opt/imbe_vocoder.git
+        update: yes
+        force: yes
+      register: imbe_vocoder_source
+
+    - name: Clean build area for imbe_vocoder
+      make:
+        chdir: /opt/imbe_vocoder.git
+        target: clean
+      when: imbe_vocoder_source.changed
+
+    - name: make imbe_vocoder
+      make:
+        chdir: /opt/imbe_vocoder.git
+      when: imbe_vocoder_source.changed
+
+    - name: install imbe_vocoder
+      make:
+        chdir: /opt/imbe_vocoder.git
+        target: install
+      when: imbe_vocoder_source.changed
+      #notify: restart mrefd
+
+    # mbelib
+
+    - name: Download source for mbelib
+      git:
+        repo: 'https://github.com/szechyjs/mbelib.git'
+        dest: /opt/mbelib.git
+        update: yes
+        force: yes
+      register: mbelib_source
+
+    - name: Setup build directory
+      file:
+        path: /opt/mbelib.git/build
+        mode: 0755
+        state: directory
+
+    - name: Setup build file (cmake)
+      command:
+        chdir: /opt/mbelib.git/build
+        cmd: cmake ..
+      when: mbelib_source.changed
+
+    - name: make imbe_vocoder
+      make:
+        chdir: /opt/mbelib.git/build
+      when: mbelib_source.changed
+
+    - name: install imbe_vocoder
+      make:
+        chdir: /opt/mbelib.git/build
+        target: install
+      when: mbelib_source.changed
+
+    # M172DMR
+
+    - name: Download source for DMR2M17 & M172DMR
+      git:
+        repo: 'https://github.com/nostar/MMDVM_CM.git'
+        dest: /opt/MMDVM_CM.git
+        update: yes
+        force: yes
+      register: m17_mmdvd_source
+
+    - name: Clean build for M172DMR
+      make:
+        chdir: /opt/MMDVM_CM.git/M172DMR
+        target: clean
+      when: m17_mmdvd_source.changed
+
+    - name: make M172DMR
+      make:
+        chdir: /opt/MMDVM_CM.git/M172DMR
+      when: m17_mmdvd_source.changed
+
+    - name: install M172DMR
+      make:
+        chdir: /opt/MMDVM_CM.git/M172DMR
+        target: install
+      when: m17_mmdvd_source.changed
+      notify: restart M172DMR
+
+    - name: Reset git repo
+      command:
+        chdir: /opt/MMDVM_CM.git/M172DMR
+        cmd: git reset --hard
+      when: m17_mmdvd_source.changed
+
+    # reload shared libraries
+    
+    - name: reload shared libraries
+      command:
+        cmd: /sbin/ldconfig
+      when:
+        - mbelib_source.changed
+        - imbe_vocoder_source.changed
+        - md380_vcocoder_source.changed
+
+
+    # config files
+
+    - name: set config directory
+      file:
+        state: directory
+        path: /opt/transcode
+        mode: 0755
+        
+    - name: set log directory
+      file:
+        state: directory
+        path:  /var/log/M172DMR
+        mode: 0755
+        owner: pi
+
+    - name: set M172DMR config file
+      template:
+        src: m172dmr/M172DMR.ini.j2
+        dest: /opt/transcode/M172DMR.ini
+        mode: 0444
+        owner: root
+        group: root
+      notify: restart M172DMR
+
+    - name: Update DMR ID List
+      copy:
+        remote_src: yes
+        src:  /opt/MMDVM_CM.git/M172DMR/DMRIDs.dat
+        dest: /opt/transcode/DMRIDs.dat
+        owner: root
+        group: pi
+        mode: 0664
+
+    - name: Update XLX Host List
+      get_url:
+        url: http://www.pistar.uk/downloads/XLXHosts.txt
+        dest: /opt/transcode/XLXHosts.txt
+        owner: root
+        group: root
+        mode: 0444
+
+    - name : set M172DMR service file
+      template:
+        src: m172dmr/M172DMR.service.j2
+        dest: /etc/systemd/system/M172DMR.service
+        owner: root
+        group: root
+        mode: 0755
+        backup: no
+      register: m172dmr_service_file
+
+    - name : reload systemd config
+      systemd:
+        daemon_reload: yes
+      when: m172dmr_service_file.changed
+
+    - name: ensure XLXd services are running
+      service:
+        name: M172DMR
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: restart M172DMR
+      service:
+        name: M172DMR
+        state: restarted

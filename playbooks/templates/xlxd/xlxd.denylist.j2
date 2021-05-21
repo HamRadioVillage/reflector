@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+##############################################################################
+#  XLXD denylist file
+#
+#  one line per entry
+#  each entry is explicitely denied access (blacklisted)
+#  you can use * as last wildcard character
+#  example:
+#    *     -> deny access to  eveybody !!!
+#    LX*   -> deny access to all callsign starting with LX
+#    LX3JL -> deny access to LX3JL exactly
+#
+#############################################################################
+{% if denylist is defined %}{% for entry in denylist %}
+{{ entry }}
+{% endfor %}{% endif %}

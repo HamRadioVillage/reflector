@@ -1,0 +1,13 @@
+# {{ansible_managed}}
+[Unit]
+Description=M17 <-> DMR/XLX Connector
+
+[Service]
+Type=simple
+Restart=always
+User=pi
+Group=pi
+ExecStart=/usr/local/bin/M172DMR /opt/transcode/M172DMR.ini
+
+[Install]
+WantedBy=multi-user.target

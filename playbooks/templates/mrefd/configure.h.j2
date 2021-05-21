@@ -1,0 +1,7 @@
+// {{ ansible_managed }}
+#define CALLSIGN "{{ reflector_name }}"
+#define NB_OF_MODULES {{ active_module_count }}
+#define LISTEN_IPV4 "{{ bind_ip_v4 }}"
+{% if multiple_same_ip_clients %}
+#define MCLIENTS
+{% endif %}

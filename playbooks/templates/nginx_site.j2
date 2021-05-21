@@ -1,0 +1,82 @@
+##  {{ansible_managed}}
+# Configuration for site {{ domain.name }}
+
+# HTTP Redirect
+server {
+    listen 80;
+    listen [::]:80;
+
+    server_name {{ domain.name }} www.{{ domain.name }};
+
+    return 301 https://$host$request_uri;
+}
+
+
+# HTTPS
+server {
+	listen 443 ssl http2;
+	listen [::]:443 ssl http2;
+
+    # Cache credentials
+    ssl_session_cache shared:SSL:20m;
+    ssl_session_timeout 60m;
+
+    # TLS Only
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    # Cyphers
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers ECDH+AESGCM:ECDH+AES256:ECDH+AES128:DHE+AES128:!ADH:!AECDH:!MD5;
+
+    # DH Params
+    ssl_dhparam /etc/nginx/dhparam.pem;
+
+    # Enable HSTS
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # Cert Pinning
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    # ssl_trusted_certificate /etc/ssl/certs/comodo_bundle.pem;
+    resolver 8.8.8.8 8.8.4.4;
+
+    ssl_certificate /etc/letsencrypt/live/{{ domain.name }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ domain.name }}/privkey.pem;
+
+	server_name {{ domain.name }} www.{{ domain.name }};
+	root /data/www-live/{{ domain.name }};
+
+	# set index doc
+	index index.html;
+
+	location / {
+        {% if domain.root_directives is defined %}
+        {{ domain.root_directives}}
+        {% else %}
+        # First attempt to serve request as file, then
+		# as directory, then fall back to displaying a 404.
+		try_files $uri $uri/ =404;
+        {% endif %}
+	}
+
+    # Never serve apache-style files.
+    location ~ /\.ht {
+        deny all;
+    }
+
+    {% if domain.additional_locations is defined %}
+    {% for loc in domain.additional_locations %}
+    location {{loc.path}} {
+        {{loc.directive}}
+    }
+    {% endfor %}
+    {% endif %}
+
+    {% if domain.rewrites is defined %}
+    {% for rule in domain.rewrites %}
+    rewrite {{rule.from}} {{rule.to}} {% if rule.flag is defined %}{{rule.flag}}{% endif %};
+    {% endfor %}
+    {% endif %}
+
+
+}

@@ -1,0 +1,120 @@
+- hosts: m17_xlx_links
+  remote_user: pi
+  become: yes
+  
+  tasks:
+    - name: Create FTDI Driver directory
+      file:
+        path: /opt/ftdi-d2xx-driver
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+    
+    - name: Download FTDI Driver
+      unarchive: 
+        remote_src: yes
+        src: https://ftdichip.com/Drivers/D2XX/Linux/libftd2xx-arm-v7-hf-1.4.8.gz
+        dest: /opt/ftdi-d2xx-driver
+        owner: root
+        group: root
+        mode: "u=rwX,g=rwX,o=rX"
+
+    - name: Install FTDI Driver (.so)
+      copy: 
+        remote_src: yes
+        src: /opt/ftdi-d2xx-driver/release/build/libftd2xx.so.1.4.8
+        dest: /usr/local/lib/
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Install FTDI Driver (.a)
+      copy: 
+        remote_src: yes
+        src: /opt/ftdi-d2xx-driver/release/build/libftd2xx.a
+        dest: /usr/local/lib/
+        owner: root
+        group: root
+        mode: 0755
+
+    - name: Link FTDI Driver
+      file:
+        state: link
+        src: /usr/local/lib/libftd2xx.so.1.4.8
+        path: /usr/local/lib/libftd2xx.so
+
+    - name: Unload ftdi_sio kernel module
+      community.general.modprobe:
+        name: ftdi_sio
+        state: absent
+
+    - name: Unload usbserial kernel module
+      community.general.modprobe:
+        name: usbserial
+        state: absent
+
+    - name: Download xlxd source
+      git:
+        repo: 'https://github.com/LX3JL/xlxd.git'
+        dest: /opt/xlxd.git
+        update: yes
+        force: yes
+      register: xlxd_source
+
+    - name: Clean build for ambed
+      make:
+        chdir: /opt/xlxd.git/ambed
+        target: clean
+      when: xlxd_source.changed
+
+    - name: make ambed
+      make:
+        chdir: /opt/xlxd.git/ambed
+      when: xlxd_source.changed
+
+    - name: install ambed
+      make:
+        chdir: /opt/xlxd.git/ambed
+        target: install
+      when: xlxd_source.changed
+
+    - name: Clean build for ambedtest
+      make:
+        chdir: /opt/xlxd.git/ambedtest
+        target: clean
+      when: xlxd_source.changed
+
+    - name: make ambedtest
+      make:
+        chdir: /opt/xlxd.git/ambedtest
+      when: xlxd_source.changed
+
+    - name : set ambedservice file
+      template:
+        src: ambed.service.j2
+        dest: /etc/systemd/system/ambed.service
+        owner: root
+        group: root
+        mode: 0755
+        backup: no
+      register: ambed_service_file
+      vars:
+       ambed_bind_ip: '10.8.0.2'
+
+    - name : reload systemd config
+      systemd:
+        daemon_reload: yes
+      when: ambed_service_file.changed
+
+    - name: ensure ambed services are running
+      service:
+        name: ambed
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: restart ambed
+      service:
+        name: ambed
+        state: restarted

@@ -1,0 +1,26 @@
+# {{ansible_managed}}
+[Unit]
+Description=XLX Reflector Daemon
+
+[Service]
+Type=forking
+
+# Set port permissions capability
+SecureBits=keep-caps
+CapabilityBoundingSet=CAP_NET_RAW
+AmbientCapabilities=CAP_NET_RAW
+Restart=always
+
+User=xlxd
+Group=xlxd
+ExecStart=/xlxd/xlxd {{reflector_id}} {{ bind_ip }} {{ ambed_ip }}
+
+# Make PID file for uptime counter to work in dashboard
+ExecStartPost=+/bin/sh -c 'umask 022; pgrep xlxd > /var/run/xlxd.pid'
+
+# Remove PID file on shutdown
+ExecStopPost=+/bin.rm /var/run.xlxd.pid
+
+
+[Install]
+WantedBy=multi-user.target

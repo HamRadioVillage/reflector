@@ -1,0 +1,58 @@
+<?php 
+/*
+{{ ansible_managed }}
+
+Possible values for IPModus
+
+HideIP
+ShowFullIP
+ShowLast1ByteOfIP
+ShowLast2ByteOfIP
+ShowLast3ByteOfIP
+
+*/
+
+$PageOptions['ContactEmail']                         = '{{ contact_email }}';		    // Support E-Mail address
+
+$PageOptions['PageRefreshActive']                    = {{ refresh_enabled }};          			// Activate automatic refresh
+$PageOptions['PageRefreshDelay']                     = '{{ refresh_ms }}';       			// Page refresh time in miliseconds
+
+
+$PageOptions['RepeatersPage'] = array();
+$PageOptions['RepeatersPage']['LimitTo']             = 99;            			// Number of Repeaters to show
+$PageOptions['RepeatersPage']['IPModus']             = '{{ IPModus }}';		 	// See possible options above
+$PageOptions['RepeatersPage']['MasqueradeCharacter'] = '*';	        	  		// Character used for  masquerade
+
+
+$PageOptions['PeerPage'] = array();
+$PageOptions['PeerPage']['LimitTo']                  = 99;            			// Number of peers to show
+$PageOptions['PeerPage']['IPModus']                  = '{{ IPModus }}'; 			// See possible options above
+$PageOptions['PeerPage']['MasqueradeCharacter']      = '*';           			// Character used for  masquerade
+
+$PageOptions['LastHeardPage']['LimitTo']             = 39;                  // Number of stations to show
+
+$PageOptions['ModuleNames'] = array();                                			// Module nomination
+{% for module in modules %}
+$PageOptions['ModuleNames']['{{ module.id }}']       = '{{ module.desc }}';
+{% endfor %}
+
+$PageOptions['UserPage']['ShowFilter']               = true;                                                         // Show Filter on Users page
+
+$Service['PIDFile']                                  = '/var/run/xlxd.pid';
+$Service['XMLFile']                                  = '/var/log/xlxd.xml';
+
+$CallingHome['Active']                               = {{ active }};					                 // xlx phone home, true or false
+$CallingHome['MyDashBoardURL']                       = '{{ dashboard_url }}';			             // dashboard url
+$CallingHome['Country']                              = "{{ country }}";                        // Country
+$CallingHome['Comment']                              = "{{ comment }}"; 				               // Comment. Max 100 character
+$CallingHome['HashFile']                             = "/xlxd/callinghome.php";                // Make sure the apache user has read and write permissions in this folder.
+$CallingHome['OverrideIPAddress']                    = "{{ external_ip }}";                    // Insert your IP address here. Leave blank for autodetection. No need to enter a fake address.
+$CallingHome['InterlinkFile']                        = "/xlxd/xlxd.interlink";                 // Path to interlink file
+
+
+/*
+  include an extra config file for people who dont like to mess with shipped config.ing.php
+  this makes updating dashboard from git a little bit easier
+*/
+
+?>

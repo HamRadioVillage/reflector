@@ -1,0 +1,136 @@
+- hosts: mrefd_reflector
+  remote_user: <YOUR_ADMIN_USER>
+  become: yes
+  vars:
+      reflector_name: "M17-HRV"
+      bind_ip_v4: 0.0.0.0
+      multiple_same_ip_clients: true
+      active_module_count: 5
+      enable_debug: true
+
+      hash: "<REDACTED>"
+      external_ip: "52.15.234.145"
+
+  tasks:
+    - name: Create mrefd user
+      user:
+        name: mrefd
+        create_home: true
+        shell: /bin/bash
+
+    - name: Download source 
+      git:
+        repo: 'https://github.com/n7tae/mrefd.git'
+        dest: /home/mrefd/mrefd.git
+        update: yes
+        force: yes
+      become_user: mrefd
+      register: mrefd_source
+
+    - name : Set mrefd build configuration file
+      template:
+        src: mrefd/configure.h.j2
+        dest: /home/mrefd/mrefd.git/configure.h
+        owner: mrefd
+        group: mrefd
+        mode: 0640
+        backup: no
+      #register: mrefd_source
+
+    - name : Set mrefd configuration script file
+      template:
+        src: mrefd/reflector.cfg.j2
+        dest: /home/mrefd/mrefd.git/reflector.cfg
+        owner: mrefd
+        group: mrefd
+        mode: 0640
+        backup: no
+      #register: mrefd_source
+
+    - name : Set mrefd build configuration file
+      template:
+        src: mrefd/configure.mk.j2
+        dest: /home/mrefd/mrefd.git/configure.mk
+        owner: mrefd
+        group: mrefd
+        mode: 0640
+        backup: no
+      #register: mrefd_source
+
+    - name: Clean build area
+      make:
+        chdir: /home/mrefd/mrefd.git/
+        target: clean
+      become_user: mrefd
+      when: mrefd_source.changed
+
+    - name: make mrefd
+      make:
+        chdir: /home/mrefd/mrefd.git/
+      become_user: mrefd
+      when: mrefd_source.changed
+
+    - name: install mrefd
+      make:
+        chdir: /home/mrefd/mrefd.git/
+        target: install
+      #become_user: mrefd
+      when: mrefd_source.changed
+      notify: restart mrefd
+
+    - name: ensure mrefd services are running
+      service:
+        name: mrefd
+        state: started
+        enabled: yes
+
+    # Dashboard
+
+    - name: Download dashboard source 
+      git:
+        repo: 'https://github.com/M17-project/ref-dash.git'
+        dest: /data/www-live/m17.hamvillage.org
+        update: yes
+        force: yes
+      register: mrefd_dashboard_source
+
+    - name: set permissions on dashboard files
+      file:
+        name: /data/www-home/m17.hamvillage.org
+        state: directory
+        recurse: true
+        mode:  "u=rwX,g=rX,o="
+        owner: root
+        group: www-data
+
+    - name : Set dashboard config file
+      template:
+        src: mrefd/config.inc.php.j2
+        dest: /data/www-live/m17.hamvillage.org/include/config.inc.php
+        owner: root
+        group: www-data
+        mode: 0440
+        backup: no
+      vars:
+        active: true
+        contact_email: "eric@ai0j.radio"
+        IPModus: "ShowFullIP"
+        refresh_enabled: true
+        refresh_ms: 10000
+        dashboard_url: "https://xlx.hamvillage.org"
+        country: "United States"
+        comment: "Ham Radio Village"
+        modules: 
+          - id: A
+            desc: "XLX478 Interlink"
+          - id: B 
+            desc: "Testing"
+          - id: C 
+            desc: "More Testing"
+
+
+  handlers:
+  - name: restart mrefd
+    service:
+      name: mrefd
+      state: restarted

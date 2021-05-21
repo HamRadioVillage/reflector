@@ -1,0 +1,156 @@
+- hosts: xlxd_reflector
+  remote_user: <YOUR_ADMIN_USER>
+  become: yes
+  vars:
+      reflector_id: 'XLX478'
+      hash: '<REDACTED>'
+      external_ip: '52.15.234.145'
+      bind_ip: '172.31.42.136'
+      ambed_ip: '10.8.0.2'
+
+  tasks:
+    - name: Download source fork
+      git:
+        repo: 'https://github.com/IvanGirderboot/xlxd.git'
+        dest: /home/xlxd/xlxd.git
+        update: yes
+        force: yes
+      become_user: xlxd
+      register: xlxd_source
+
+    - name: Clean build area
+      make:
+        chdir: /home/xlxd/xlxd.git/src/
+        target: clean
+      become_user: xlxd
+      when: xlxd_source.changed
+
+    - name: make xlxd
+      make:
+        chdir: /home/xlxd/xlxd.git/src/
+      become_user: xlxd
+      when: xlxd_source.changed
+
+    - name: install xlxd
+      make:
+        chdir: /home/xlxd/xlxd.git/src/
+        target: install
+      become_user: xlxd
+      when: xlxd_source.changed
+      notify: restart xlxd
+
+    - name: Update DMR ID List
+      get_url:
+        url:  http://xlxapi.rlx.lu/api/exportdmr.php
+        dest: /xlxd/dmrid.dat
+        owner: xlxd
+        group: xlxd
+        mode: 0644
+
+    - name : Set Icom G3 Terminal config file
+      template:
+        src: xlxd/xlxd.terminal.j2
+        dest: /xlxd/xlxd.terminal
+        owner: xlxd
+        group: xlxd
+        mode: 0640
+        backup: no
+      notify: restart xlxd
+      vars:
+        terminal_modules_allowed: "*"
+    
+    - name : Set xlxd Interlink file
+      template:
+        src: xlxd/xlxd.interlink.j2
+        dest: /xlxd/xlxd.interlink
+        owner: xlxd
+        group: xlxd
+        mode: 0640
+        backup: no
+      notify: restart xlxd
+      vars:
+        interlinks:
+         - BM3102 3102.repeater.net A
+
+    - name : Set xlxd allowlist
+      template:
+        src: xlxd/xlxd.allowlist.j2
+        dest: /xlxd/xlxd.whitelist
+        owner: xlxd
+        group: xlxd
+        mode: 0640
+        backup: no
+      notify: restart xlxd
+
+    - name : Set xlxd denylist
+      template:
+        src: xlxd/xlxd.denylist.j2
+        dest: /xlxd/xlxd.blacklist
+        owner: xlxd
+        group: xlxd
+        mode: 0640
+        backup: no
+      notify: restart xlxd
+
+    - name : Set callinghome token file
+      template:
+        src: xlxd/callinghome.php.j2
+        dest: /xlxd/callinghome.php
+        owner: xlxd
+        group: www-data
+        mode: 0640
+        backup: yes
+
+    - name : Set dashboard config file
+      template:
+        src: xlxd/config.inc.php.j2
+        dest: /data/www-live/xlx.hamvillage.org/config.inc.php
+        owner: xlxd
+        group: www-data
+        mode: 0640
+        backup: yes
+      vars:
+        active: true
+        contact_email: "eric@ai0j.radio"
+        IPModus: "ShowFullIP"
+        refresh_enabled: true
+        refresh_ms: 10000
+        dashboard_url: "https://xlx.hamvillage.org"
+        country: "United States"
+        comment: "Ham Radio Village"
+        modules: 
+          - id: A
+            desc: "D-Star/M17/YSF Link"
+          - id: B 
+            desc: "D-RATS Data"
+          - id: C 
+            desc: "D-Star Only"
+          - id: D 
+            desc: "D-Star Terminal Mode"
+
+    - name : set xlxd service file
+      template:
+        src: xlxd/xlxd.service.j2
+        dest: /etc/systemd/system/xlxd.service
+        owner: root
+        group: root
+        mode: 0755
+        backup: no
+      register: xlx_service_file
+
+    - name : reload systemd config
+      systemd:
+        daemon_reload: yes
+      when: xlx_service_file.changed
+
+    - name: ensure XLXd services are running
+      service:
+        name: xlxd
+        state: started
+        enabled: yes
+
+  handlers:
+  - name: restart xlxd
+    service:
+      name: xlxd
+      state: restarted
